@@ -1,5 +1,8 @@
+@file:kotlin.OptIn(ExperimentalPermissionsApi::class)
+
 package com.composeapp.signzy_android_assignment.presentation.kyc
 
+import android.Manifest
 import android.content.Context
 import android.graphics.BitmapFactory
 import android.util.Log
@@ -44,6 +47,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.FlashOff
 import androidx.compose.material.icons.filled.FlashOn
 import androidx.compose.material.icons.filled.FlipCameraIos
+import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -67,18 +71,21 @@ import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavHostController
 import com.composeapp.signzy_android_assignment.domain.models.UserVerification
 import com.composeapp.signzy_android_assignment.domain.models.VerificationStatus
 import com.composeapp.signzy_android_assignment.presentation.MainViewModel
 import com.composeapp.signzy_android_assignment.presentation.kyc.components.VerifyDialog
 import com.composeapp.signzy_android_assignment.presentation.state.ResultState
+import com.google.accompanist.permissions.ExperimentalPermissionsApi
+import com.google.accompanist.permissions.isGranted
+import com.google.accompanist.permissions.rememberPermissionState
+import com.google.accompanist.permissions.shouldShowRationale
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.face.FaceDetection
 import com.google.mlkit.vision.face.FaceDetectorOptions
@@ -97,8 +104,53 @@ fun KycScreen(
     val context = LocalContext.current
     val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
 
-    val currentUser =
-        (viewModel.users.collectAsState().value.resultState as ResultState.Success).data.find { it.id == userId }
+
+    val cameraPermissionState = rememberPermissionState(permission = Manifest.permission.CAMERA)
+
+
+    LaunchedEffect(key1 = true) {
+        if (!cameraPermissionState.status.isGranted) {
+            cameraPermissionState.launchPermissionRequest()
+        }
+    }
+
+
+    if (!cameraPermissionState.status.isGranted) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color(0xFF191C1E))
+                .padding(24.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    text = "Camera Permission Required",
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White,
+                    modifier = Modifier.padding(bottom = 8.dp)
+                )
+                Text(
+                    text = if (cameraPermissionState.status.shouldShowRationale) {
+                        "The app needs camera access to securely scan and verify your identity for KYC check purposes."
+                    } else {
+                        "Please grant camera access to proceed with verification."
+                    },
+                    fontSize = 14.sp,
+                    color = Color.Gray,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.padding(bottom = 24.dp)
+                )
+                Button(onClick = { cameraPermissionState.launchPermissionRequest() }) {
+                    Text("Grant Permission")
+                }
+            }
+        }
+        return
+    }
+
+    val currentUser = (viewModel.users.collectAsState().value.resultState as ResultState.Success).data.find { it.id == userId }
 
     var capturedPhotoFile by remember { mutableStateOf<File?>(null) }
     var showVerifyDialog by remember { mutableStateOf(false) }
@@ -172,14 +224,13 @@ fun KycScreen(
                 cameraSelector,
                 previewUseCase,
                 imageCaptureUseCase,
-                imageAnalysisUseCase // Bound into camera execution lifecycle
+                imageAnalysisUseCase
             )
         } catch (exc: Exception) {
             Log.e("CameraX", "Use case binding failed", exc)
         }
     }
 
-    // Pulsing animation configuration for the face guide layout overlay
     val infiniteTransition = rememberInfiniteTransition(label = "GuidePulse")
     val alphaPulse by infiniteTransition.animateFloat(
         initialValue = 0.5f,
@@ -191,7 +242,6 @@ fun KycScreen(
         label = "AlphaPulse"
     )
 
-    // Smoothly transition base state guide frame color properties
     val baseGuideColor by animateColorAsState(
         targetValue = if (isFaceDetected) Color.Green else Color.Red,
         animationSpec = tween(durationMillis = 300),
@@ -203,24 +253,21 @@ fun KycScreen(
             .fillMaxSize()
             .background(Color.Black)
     ) {
-
         if (showVerifyDialog && capturedPhotoFile != null) {
             VerifyDialog(
                 userId = currentUser?.id ?: 0,
                 capturedFile = capturedPhotoFile,
                 userName = "${currentUser?.firstName} ${currentUser?.lastName}",
                 onRetakeClicked = {
-                    // Delete the junk cached image data to clear memory footprints
                     capturedPhotoFile?.delete()
                     capturedPhotoFile = null
                     showVerifyDialog = false
                 },
                 onVerifyClicked = {
                     val options = BitmapFactory.Options().apply {
-                        inSampleSize = 2 // Keeps your downsampling for performance
+                        inSampleSize = 2
                     }
 
-                    // 1. Decode the raw bitmap
                     val rawBitmap =
                         BitmapFactory.decodeFile(capturedPhotoFile!!.absolutePath, options)
                     showVerifyDialog = false
@@ -229,15 +276,15 @@ fun KycScreen(
                             userId = currentUser?.id ?: 0,
                             verificationStatus = VerificationStatus.APPROVED,
                             capturedPhoto = rawBitmap
-
                         )
                     )
-                    viewModel.fetchUserVerification()
+
                     Toast.makeText(
                         context,
                         "User Verified Successfully!",
                         Toast.LENGTH_SHORT
                     ).show()
+                    viewModel.fetchUserVerification()
                     navHostController.popBackStack()
                 }
             )
@@ -261,12 +308,10 @@ fun KycScreen(
             val left = (canvasWidth - guideWidth) / 2f
             val top = (canvasHeight - guideHeight) / 2.3f
 
-
             drawRect(
                 color = Color.Black.copy(alpha = 0.5f),
                 size = size
             )
-
 
             drawRoundRect(
                 color = Color.Transparent,
@@ -275,7 +320,6 @@ fun KycScreen(
                 cornerRadius = CornerRadius(120.dp.toPx(), 120.dp.toPx()),
                 blendMode = BlendMode.Clear
             )
-
 
             drawRoundRect(
                 color = baseGuideColor.copy(alpha = alphaPulse),
@@ -289,14 +333,12 @@ fun KycScreen(
             )
         }
 
-
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .statusBarsPadding()
                 .navigationBarsPadding()
         ) {
-
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -305,7 +347,6 @@ fun KycScreen(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-
                 Box(
                     modifier = Modifier
                         .size(48.dp)
@@ -321,7 +362,6 @@ fun KycScreen(
                         modifier = Modifier.size(28.dp)
                     )
                 }
-
 
                 Box(
                     modifier = Modifier
@@ -344,14 +384,12 @@ fun KycScreen(
                 }
             }
 
-
             Box(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth(),
                 contentAlignment = Alignment.BottomCenter
             ) {
-
                 Box(
                     modifier = Modifier
                         .padding(bottom = 64.dp)
@@ -388,15 +426,7 @@ fun KycScreen(
                     horizontalArrangement = Arrangement.SpaceAround,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-
-                    Box(
-                        modifier = Modifier
-                            .size(48.dp)
-//                            .clip(RoundedCornerShape(8.dp))
-//                            .background(Color.White.copy(alpha = 0.1f))
-//                            .border(1.dp, Color.White.copy(alpha = 0.2f), RoundedCornerShape(8.dp))
-                    ) {}
-
+                    Box(modifier = Modifier.size(48.dp)) {}
 
                     Box(
                         modifier = Modifier
@@ -468,4 +498,3 @@ private fun capturePhoto(
         }
     )
 }
-
