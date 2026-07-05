@@ -212,8 +212,8 @@ Verified          Pending
 
 ## 📸 Screenshots
 
-| Accounts | Details | Camera | Verified |
-|-----------|---------|--------|----------|
+| Accounts | Verified                    | Details                    | Kyc                          |
+|-----------|-----------------------------|----------------------------|------------------------------|
 | ![Accounts](./images/02.jpg) | ![Details](./images/03.jpg) | ![Camera](./images/04.jpg) | ![Verified](./images/05.jpg) |
 ---
 
