@@ -270,7 +270,6 @@ fun KycScreen(
 
                     val rawBitmap =
                         BitmapFactory.decodeFile(capturedPhotoFile!!.absolutePath, options)
-                    showVerifyDialog = false
                     viewModel.insertUserVerification(
                         UserVerification(
                             userId = currentUser?.id ?: 0,
@@ -284,6 +283,7 @@ fun KycScreen(
                         "User Verified Successfully!",
                         Toast.LENGTH_SHORT
                     ).show()
+                    showVerifyDialog = false
                     viewModel.fetchUserVerification()
                     navHostController.popBackStack()
                 }

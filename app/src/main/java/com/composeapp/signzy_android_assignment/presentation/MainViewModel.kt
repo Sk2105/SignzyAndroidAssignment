@@ -68,9 +68,6 @@ class MainViewModel @Inject constructor(
     // User Verification
     fun fetchUserVerification(){
         viewModelScope.launch {
-            _userVerification.update {
-                DataHolder(resultState = ResultState.Loading())
-            }
             val result = getUserVerificationUseCase()
 
                 _userVerification.update {
